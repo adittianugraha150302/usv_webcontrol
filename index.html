@@ -6,11 +6,6 @@
     <title>TA USV - Teknik Perkapalan</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
-    <script src="https://cdn.jsdelivr.net/npm/leaflet-rotatedmarker@0.2.0/leaflet.rotatedMarker.min.js"></script>
-    
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body { background-color: #1a1c1e; color: #e3e2e6; padding: 15px; }
@@ -31,6 +26,10 @@
         @media(min-width: 992px) { .main-container { flex-direction: row; } }
         
         .panel { flex: 1; background-color: #24262a; border-radius: 12px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); min-width: 320px; }
+        /* Panel kamera dibuat lebih besar (2x bobot panel lain) sejak panel GPS dihapus */
+        .panel-camera { flex: 2; min-width: 420px; }
+        .panel-camera .video-wrapper { padding-bottom: 100%; }
+        @media(min-width: 1400px) { .panel-camera .video-wrapper { padding-bottom: 85%; } }
         .panel-title { font-size: 14px; font-weight: bold; margin-bottom: 12px; color: #8cb4f9; border-left: 4px solid #4791ff; padding-left: 8px; }
         .video-wrapper { position: relative; width: 100%; padding-bottom: 75%; background-color: #000; border-radius: 8px; overflow: hidden; border: 1px solid #3f4752; }
         .video-wrapper iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; }
@@ -46,6 +45,15 @@
         .throttle-box { display: flex; flex-direction: column; align-items: center; gap: 10px; }
         .throttle-slider { -webkit-appearance: none; appearance: none; width: 60px; height: 150px; background: #24262a; border-radius: 30px; border: 2px solid #3f4752; outline: none; writing-mode: bt-lr; -webkit-writing-mode: vertical-lr; direction: rtl; }
         .throttle-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 54px; height: 30px; border-radius: 15px; background: #ff7b00; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+
+        /* Tombol preset cepat di sebelah slider throttle (untuk mempermudah pengujian) */
+        .throttle-with-presets { display: flex; align-items: center; gap: 10px; }
+        .throttle-presets { display: flex; flex-direction: column; gap: 5px; }
+        .btn-preset { padding: 5px 9px; font-size: 10px; font-weight: bold; border: 1px solid #3f4752; border-radius: 6px; cursor: pointer; color: #ffffff; background-color: #334455; white-space: nowrap; }
+        .btn-preset:hover { background-color: #445566; }
+        .btn-preset.preset-maju { background-color: #12563d; }
+        .btn-preset.preset-mundur { background-color: #6e1e1e; }
+        .btn-preset.preset-netral { background-color: #4a5568; }
         
         .joystick-zone { width: 160px; height: 160px; background: radial-gradient(circle, #24262a 40%, #1a1c1e 100%); border: 2px dashed #ff7b00; border-radius: 50%; position: relative; display: flex; justify-content: center; align-items: center; box-shadow: inset 0 0 10px rgba(0,0,0,0.8); user-select: none; touch-action: none; }
         .joystick-handle { width: 50px; height: 50px; background: radial-gradient(circle, #ff9d00 0%, #d45d00 100%); border-radius: 50%; position: absolute; cursor: pointer; box-shadow: 0 4px 8px rgba(0,0,0,0.6); user-select: none; touch-action: none; }
@@ -54,7 +62,14 @@
         .btn-emergency:hover { background-color: #ff1744; }
         .log-panel { margin-top: 15px; background-color: #1a1c1e; border: 1px solid #3f4752; border-radius: 8px; padding: 10px; height: 90px; overflow-y: auto; font-family: monospace; font-size: 11px; color: #00ff66; }
         
-        #map { width: 100%; height: 320px; border: 1px solid #3f4752; border-radius: 8px; background-color: #1a1c1e; }
+        /* --- Stopwatch untuk uji delay live stream --- */
+        .stopwatch-box { margin-top: 12px; background-color: #1a1c1e; border: 1px solid #3f4752; border-radius: 8px; padding: 12px; text-align: center; }
+        .stopwatch-display { font-family: 'Consolas', monospace; font-size: 30px; font-weight: bold; color: #00ff66; letter-spacing: 1px; margin-bottom: 10px; }
+        .stopwatch-btns { display: flex; gap: 8px; }
+        .stopwatch-btns button { flex: 1; padding: 10px; border: none; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer; text-transform: uppercase; }
+        .btn-sw-start { background-color: #006a4e; color: #ffffff; }
+        .btn-sw-stop { background-color: #ba1a1a; color: #ffffff; }
+        .btn-sw-reset { background-color: #334455; color: #ffffff; }
     </style>
 </head>
 <body>
@@ -74,25 +89,20 @@
 
     <div class="main-container">
         
-        <div class="panel">
+        <div class="panel panel-camera">
             <div class="panel-title">LIVE CAMERA MONITOR</div>
             <div class="video-wrapper">
-                <iframe id="camFrame" src="https://postbox-papyrus-left.ngrok-free.dev/video_feed"></iframe>
+                <iframe id="camFrame" src="https://gentleman-arousal-sufferer.ngrok-free.dev/video_feed"></iframe>
             </div>
             <button class="btn-reconnect" onclick="forceReconnectVideo()">🔄 RECONNECT VIDEO STREAM</button>
-        </div>
 
-        <div class="panel">
-            <div class="panel-title">GEOSPATIAL REAL-TIME TRACKING MAP</div>
-            <div id="map"></div>
-            <div class="widget-grid" style="margin-top: 12px; margin-bottom: 0;">
-                <div class="widget-card" style="padding: 6px;">
-                    <div class="widget-label">Latitude</div>
-                    <div class="widget-value" style="font-size: 13px; color: #00ff66;"><span id="txtLat">0.000000</span></div>
-                </div>
-                <div class="widget-card" style="padding: 6px;">
-                    <div class="widget-label">Longitude</div>
-                    <div class="widget-value" style="font-size: 13px; color: #00ff66;"><span id="txtLon">0.000000</span></div>
+            <div class="stopwatch-box">
+                <div class="widget-label" style="margin-bottom:8px;">STOPWATCH UJI DELAY STREAM</div>
+                <div class="stopwatch-display" id="stopwatchDisplay">00:00.00</div>
+                <div class="stopwatch-btns">
+                    <button class="btn-sw-start" id="btnSwStart" onclick="stopwatchStart()">▶ Mulai</button>
+                    <button class="btn-sw-stop" onclick="stopwatchStop()">⏸ Stop</button>
+                    <button class="btn-sw-reset" onclick="stopwatchReset()">⟲ Reset</button>
                 </div>
             </div>
         </div>
@@ -109,12 +119,18 @@
                     <div class="widget-value"><span id="txtPitch">0.0</span><span class="unit">°</span></div>
                 </div>
                 <div class="widget-card">
-                    <div class="widget-label">Compass</div>
+                    <div class="widget-label">Heading</div>
                     <div class="widget-value"><span id="txtCompass">0.0</span><span class="unit">°</span></div>
                 </div>
             </div>
 
-            <!-- Tombol Kalibrasi / Reset Compass -->
+            <div class="widget-grid" style="margin-bottom: 15px;">
+                <div class="widget-card">
+                    <div class="widget-label">Command Latency (Web → USV)</div>
+                    <div class="widget-value"><span id="txtLatency">--</span><span class="unit">ms</span></div>
+                </div>
+            </div>
+
             <button class="btn-reconnect" style="background-color: #3f4752; margin-top: 0; margin-bottom: 15px;" onclick="kirimResetCompass()">🔄 RESET / KALIBRASI UTARA</button>
 
             <div class="panel-title" style="margin-top: 15px;">MANUAL ACTUATOR CONTROL</div>
@@ -122,7 +138,18 @@
             <div class="control-container">
                 <div class="throttle-box">
                     <span style="font-size: 11px; font-weight: bold; color: #ff7b00;">THROTTLE</span>
-                    <input type="range" min="0" max="100" value="50" class="throttle-slider" id="throttleInput" oninput="kirimThrottle(this.value)">
+                    <div class="throttle-with-presets">
+                        <input type="range" min="0" max="100" value="50" class="throttle-slider" id="throttleInput" oninput="kirimThrottle(this.value)">
+                        <div class="throttle-presets">
+                            <button type="button" class="btn-preset preset-maju" onclick="setThrottlePreset(100)">Maju 100%</button>
+                            <button type="button" class="btn-preset preset-maju" onclick="setThrottlePreset(75)">Maju 50%</button>
+                            <button type="button" class="btn-preset preset-maju" onclick="setThrottlePreset(62)">Maju 25%</button>
+                            <button type="button" class="btn-preset preset-netral" onclick="setThrottlePreset(50)">Netral</button>
+                            <button type="button" class="btn-preset preset-mundur" onclick="setThrottlePreset(38)">Mundur 25%</button>
+                            <button type="button" class="btn-preset preset-mundur" onclick="setThrottlePreset(25)">Mundur 50%</button>
+                            <button type="button" class="btn-preset preset-mundur" onclick="setThrottlePreset(0)">Mundur 100%</button>
+                        </div>
+                    </div>
                     <span id="valThrottle" style="font-size: 12px; font-weight: bold; color: #00ff66;">Netral (50%)</span>
                 </div>
 
@@ -153,32 +180,13 @@
             }
         }
 
-        // --- INISIALISASI ENGINE PETA DIGITAL LEAFLET ---
-        const map = L.map('map').setView([-7.0522, 110.4377], 17);
-        
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
-
-        // Mengubah marker kapal menjadi bentuk point murni (CircleMarker) tanpa popup/teks diatasnya
-        let markerKapal = L.circleMarker([-7.0522, 110.4377], {
-            radius: 8,
-            fillColor: "#4791ff",
-            color: "#ffffff",
-            weight: 2,
-            opacity: 1,
-            fillOpacity: 0.9
-        }).addTo(map);
-
-        let koordinatJejak = [];
-        let garisLintasan = L.polyline(koordinatJejak, {color: '#ff7b00', weight: 4, opacity: 0.8}).addTo(map);
-
         // --- DATA JARINGAN NETWORK MQTT ---
         const BROKER_URL = "wss://broker.emqx.io:8084/mqtt"; 
         const TOPIC_CONTROL = "usv/control/navigation";
         const TOPIC_TELEMETRY = "usv/telemetry/sensors";
-        const LINK_VIDEO_STATIS = "https://postbox-papyrus-left.ngrok-free.dev/video_feed";
+        const TOPIC_LATENCY = "usv/latency/command";
+        const TOPIC_PING_REPORT = "usv/ping/latency";
+        const LINK_VIDEO_STATIS = "https://gentleman-arousal-sufferer.ngrok-free.dev/video_feed";
 
         let currentSteerDirection = "straight";
         let isDragging = false;
@@ -199,45 +207,37 @@
                 statusBar.className = "status-bar online";
             }
             client.subscribe(TOPIC_TELEMETRY);
+            client.subscribe(TOPIC_LATENCY);
         });
 
-        // DECODER PAKET TELEMETRI (Mendukung 5 data IMU+GPS atau 6 data dengan Kompas)
         client.on('message', (topic, payload) => {
             if (topic === TOPIC_TELEMETRY) {
                 const parts = payload.toString().split(",");
                 
                 if (parts.length >= 5) {
-                    // 1. Render Sensor MPU
+                    // 1. Render Sensor MPU Roll & Pitch
                     document.getElementById("txtRoll").innerText = parseFloat(parts[0]).toFixed(1);
                     document.getElementById("txtPitch").innerText = parseFloat(parts[1]).toFixed(1);
                     
-                    // 2. Ekstraksi GPS
-                    const latKapal = parseFloat(parts[3]);
-                    const lonKapal = parseFloat(parts[4]);
+                    // 2. Render Compass
+                    let heading = parseFloat(parts[2]);
+                    document.getElementById("txtCompass").innerText = heading.toFixed(1);
 
-                    document.getElementById("txtLat").innerText = latKapal.toFixed(6);
-                    document.getElementById("txtLon").innerText = lonKapal.toFixed(6);
-
-                    // 3. Ekstraksi Kompas / Heading ke widget Compass (Jika ada parameter ke-6)
-                    let heading = 0.0;
-                    if (parts.length === 6) {
-                        heading = parseFloat(parts[5]);
-                        document.getElementById("txtCompass").innerText = heading.toFixed(1);
-                    }
-
-                    // Plotting rute riil
-                    if (latKapal !== 0.0 && lonKapal !== 0.0) {
-                        const posisiBaru = [latKapal, lonKapal];
-                        markerKapal.setLatLng(posisiBaru);
-                        
-                        // Putar ikon kapal panah di peta secara live! (Diabaikan karena menggunakan circleMarker murni)
-                        if (markerKapal.setRotationAngle) {
-                            markerKapal.setRotationAngle(heading);
-                        }
-
-                        koordinatJejak.push(posisiBaru);
-                        garisLintasan.setLatLngs(koordinatJejak);
-                        map.panTo(posisiBaru);
+                    // Catatan: data GPS (parts[3], parts[4]) tetap dikirim oleh Raspi/ESP32,
+                    // tapi tampilan peta & lat/lon di web ini sudah dihapus sesuai permintaan.
+                }
+            } else if (topic === TOPIC_LATENCY) {
+                // Pi meng-echo balik timestamp yang sama persis (bukan nilai ms terhitung).
+                // Round-trip dihitung DI SINI pakai satu jam saja (jam browser), supaya
+                // tidak bias akibat jam Pi & browser tidak sinkron.
+                const timestampEcho = parseFloat(payload.toString());
+                if (!isNaN(timestampEcho)) {
+                    const roundTripMs = Date.now() - timestampEcho;
+                    const latencyMs = roundTripMs / 2; // asumsi jalur kirim & terima simetris
+                    document.getElementById("txtLatency").innerText = latencyMs.toFixed(1);
+                    // Lapor balik nilai yang sudah dihitung ke Pi, supaya tetap tercatat di CSV logger
+                    if (client && client.connected) {
+                        client.publish(TOPIC_PING_REPORT, latencyMs.toFixed(1));
                     }
                 }
             }
@@ -257,13 +257,25 @@
 
         function kirimPerintah(stringPerintah) {
             if (client && client.connected) {
-                client.publish(TOPIC_CONTROL, stringPerintah);
+                // Menempelkan timestamp (ms) di akhir payload agar Raspi bisa menghitung
+                // command latency (waktu dari klik di web sampai diterima Pi).
+                // Contoh payload terkirim: "left,50,1720598421123"
+                client.publish(TOPIC_CONTROL, `${stringPerintah},${Date.now()}`);
             }
         }
 
         function kirimResetCompass() {
             logKeConsole("TX COMPASS: Mengirim perintah kalibrasi utara...");
             kirimPerintah("reset_compass,50"); 
+        }
+
+        function setThrottlePreset(val) {
+            // Dipanggil oleh tombol preset (25%/50%/100% maju & mundur) agar slider
+            // langsung diatur ke nilai tersebut, sama seperti digeser manual.
+            const throttleInputDom = document.getElementById("throttleInput");
+            throttleInputDom.value = val;
+            smoothedThrottleValue = val; // sinkronkan agar gamepad tidak menimpa balik nilai preset
+            kirimThrottle(val);
         }
 
         function kirimThrottle(val) {
@@ -340,6 +352,139 @@
         function forceReconnectVideo() {
             document.getElementById('camFrame').src = LINK_VIDEO_STATIS + "?t=" + Date.now();
             logKeConsole("🔄 Menyegarkan jalur video feed...");
+        }
+
+        // ==================================================================
+        // ⏱️ ENGINE STOPWATCH (UJI DELAY LIVE STREAM)
+        // Menggunakan requestAnimationFrame (bukan setInterval cepat) agar
+        // tidak membebani event loop / mengganggu proses pesan MQTT.
+        // ==================================================================
+        let swRunning = false;
+        let swStartTime = 0;
+        let swElapsed = 0;
+        let swRafId = null;
+        const swDisplay = document.getElementById("stopwatchDisplay");
+
+        function swFormat(ms) {
+            const totalCs = Math.floor(ms / 10); // centiseconds
+            const cs = totalCs % 100;
+            const totalSec = Math.floor(totalCs / 100);
+            const sec = totalSec % 60;
+            const min = Math.floor(totalSec / 60);
+            const pad = (n, len = 2) => String(n).padStart(len, '0');
+            return `${pad(min)}:${pad(sec)}.${pad(cs)}`;
+        }
+
+        function swLoop() {
+            if (!swRunning) return;
+            swElapsed = performance.now() - swStartTime;
+            swDisplay.innerText = swFormat(swElapsed);
+            swRafId = requestAnimationFrame(swLoop);
+        }
+
+        function stopwatchStart() {
+            if (swRunning) return;
+            swRunning = true;
+            swStartTime = performance.now() - swElapsed;
+            swRafId = requestAnimationFrame(swLoop);
+            logKeConsole("⏱️ Stopwatch dimulai (uji delay live stream).");
+        }
+
+        function stopwatchStop() {
+            if (!swRunning) return;
+            swRunning = false;
+            if (swRafId) cancelAnimationFrame(swRafId);
+            logKeConsole(`⏱️ Stopwatch berhenti pada ${swFormat(swElapsed)}.`);
+        }
+
+        function stopwatchReset() {
+            swRunning = false;
+            if (swRafId) cancelAnimationFrame(swRafId);
+            swElapsed = 0;
+            swDisplay.innerText = swFormat(0);
+            logKeConsole("⏱️ Stopwatch direset.");
+        }
+
+        // ==================================================================
+        // 🎮 ENGINE KONTROL STIK PS (GAMEPAD API)
+        // ==================================================================
+        let statusGamepadAktif = false;
+
+        // Nilai throttle yang sudah dihaluskan (smoothing), dimulai dari posisi netral.
+        // Semakin kecil throttleSmoothingFactor, semakin halus/lambat perubahannya
+        // sehingga geseran kecil di stik tidak langsung membuat gas melonjak.
+        let smoothedThrottleValue = 50;
+        const throttleSmoothingFactor = 0.12;
+
+        window.addEventListener("gamepadconnected", (e) => {
+            logKeConsole("Gamepad terhubung: " + e.gamepad.id);
+            statusGamepadAktif = true;
+            bacaInputGamepad();
+        });
+
+        window.addEventListener("gamepaddisconnected", (e) => {
+            logKeConsole("Gamepad terputus: " + e.gamepad.id);
+            statusGamepadAktif = false;
+        });
+
+        function bacaInputGamepad() {
+            if (!statusGamepadAktif) return;
+
+            const gamepads = navigator.getGamepads();
+            const gp = gamepads[0]; 
+
+            if (gp) {
+                // 1. ANALOG KIRI (Sumbu Vertikal - axes[1]) -> THROTTLE (GAS)
+                let axisThrottle = gp.axes[1]; 
+                if (Math.abs(axisThrottle) < 0.1) axisThrottle = 0; // Filter deadzone
+
+                // Konversi sumbu vertikal (-1 s.d 1) menjadi rentang slider 0-100%
+                // Dibalik arahnya agar: Atas = 100 (Maju), Bawah = 0 (Mundur), Tengah = 50 (Netral)
+                let targetSliderThrottle = Math.round(((axisThrottle * -1) + 1) * 50);
+
+                // Smoothing: nilai target didekati sedikit demi sedikit tiap frame,
+                // bukan langsung dipakai mentah-mentah, supaya geseran kecil pada stik
+                // tidak membuat gas langsung melonjak besar.
+                smoothedThrottleValue += (targetSliderThrottle - smoothedThrottleValue) * throttleSmoothingFactor;
+                let nilaiSliderThrottle = Math.round(smoothedThrottleValue);
+
+                const throttleInputDom = document.getElementById("throttleInput");
+                if (throttleInputDom && throttleInputDom.value != nilaiSliderThrottle) {
+                    throttleInputDom.value = nilaiSliderThrottle;
+                    kirimThrottle(nilaiSliderThrottle); 
+                }
+
+                // 2. ANALOG KANAN (Sumbu Horizontal - axes[2] atau axes[3]) -> STEERING (KEMUDI)
+                // Default stik PS standar menggunakan axes[2] untuk horizontal analog kanan
+                let axisSteer = gp.axes[2]; 
+                if (Math.abs(axisSteer) < 0.1) axisSteer = 0; // Filter deadzone
+
+                let arahKemudiBaru = "straight";
+                if (axisSteer < -0.3) {
+                    arahKemudiBaru = "left";
+                } else if (axisSteer > 0.3) {
+                    arahKemudiBaru = "right";
+                }
+
+                // Sinkronisasi komponen joystick visual & pengiriman data MQTT jika arah bergeser
+                if (currentSteerDirection !== arahKemudiBaru) {
+                    currentSteerDirection = arahKemudiBaru;
+                    document.getElementById("valSteer").innerText = "Kemudi: " + arahKemudiBaru;
+                    
+                    // Gerakkan bulatan handle joystick visual di web mengikuti stik secara real-time
+                    if (joyHandle) {
+                        let posisiXVisual = axisSteer * 55; // Batas mekanis 55px kiri/kanan di style CSS
+                        joyHandle.style.left = (posisiXVisual + 55) + 'px';
+                    }
+
+                    logKeConsole(`TX STEERING: Gamepad mengubah kemudi -> ${arahKemudiBaru}`);
+                    const currentThrottle = document.getElementById("throttleInput").value;
+                    kirimPerintah(`${arahKemudiBaru},${currentThrottle}`);
+                }
+            }
+
+            // Loop pembacaan secara kontinu memanfaatkan frame browser
+            requestAnimationFrame(bacaInputGamepad);
         }
     </script>
 </body>
