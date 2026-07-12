@@ -6,11 +6,6 @@
     <title>TA USV - Teknik Perkapalan</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
-    <script src="https://cdn.jsdelivr.net/npm/leaflet-rotatedmarker@0.2.0/leaflet.rotatedMarker.min.js"></script>
-    
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body { background-color: #1a1c1e; color: #e3e2e6; padding: 15px; }
@@ -31,6 +26,10 @@
         @media(min-width: 992px) { .main-container { flex-direction: row; } }
         
         .panel { flex: 1; background-color: #24262a; border-radius: 12px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); min-width: 320px; }
+        /* Panel kamera dibuat lebih besar (2x bobot panel lain) sejak panel GPS dihapus */
+        .panel-camera { flex: 2; min-width: 420px; }
+        .panel-camera .video-wrapper { padding-bottom: 100%; }
+        @media(min-width: 1400px) { .panel-camera .video-wrapper { padding-bottom: 85%; } }
         .panel-title { font-size: 14px; font-weight: bold; margin-bottom: 12px; color: #8cb4f9; border-left: 4px solid #4791ff; padding-left: 8px; }
         .video-wrapper { position: relative; width: 100%; padding-bottom: 75%; background-color: #000; border-radius: 8px; overflow: hidden; border: 1px solid #3f4752; }
         .video-wrapper iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; }
@@ -63,8 +62,6 @@
         .btn-emergency:hover { background-color: #ff1744; }
         .log-panel { margin-top: 15px; background-color: #1a1c1e; border: 1px solid #3f4752; border-radius: 8px; padding: 10px; height: 90px; overflow-y: auto; font-family: monospace; font-size: 11px; color: #00ff66; }
         
-        #map { width: 100%; height: 320px; border: 1px solid #3f4752; border-radius: 8px; background-color: #1a1c1e; }
-
         /* --- Stopwatch untuk uji delay live stream --- */
         .stopwatch-box { margin-top: 12px; background-color: #1a1c1e; border: 1px solid #3f4752; border-radius: 8px; padding: 12px; text-align: center; }
         .stopwatch-display { font-family: 'Consolas', monospace; font-size: 30px; font-weight: bold; color: #00ff66; letter-spacing: 1px; margin-bottom: 10px; }
@@ -92,7 +89,7 @@
 
     <div class="main-container">
         
-        <div class="panel">
+        <div class="panel panel-camera">
             <div class="panel-title">LIVE CAMERA MONITOR</div>
             <div class="video-wrapper">
                 <iframe id="camFrame" src="https://gentleman-arousal-sufferer.ngrok-free.dev/video_feed"></iframe>
@@ -106,21 +103,6 @@
                     <button class="btn-sw-start" id="btnSwStart" onclick="stopwatchStart()">▶ Mulai</button>
                     <button class="btn-sw-stop" onclick="stopwatchStop()">⏸ Stop</button>
                     <button class="btn-sw-reset" onclick="stopwatchReset()">⟲ Reset</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="panel">
-            <div class="panel-title">GEOSPATIAL REAL-TIME TRACKING MAP</div>
-            <div id="map"></div>
-            <div class="widget-grid" style="margin-top: 12px; margin-bottom: 0;">
-                <div class="widget-card" style="padding: 6px;">
-                    <div class="widget-label">Latitude</div>
-                    <div class="widget-value" style="font-size: 13px; color: #00ff66;"><span id="txtLat">0.000000</span></div>
-                </div>
-                <div class="widget-card" style="padding: 6px;">
-                    <div class="widget-label">Longitude</div>
-                    <div class="widget-value" style="font-size: 13px; color: #00ff66;"><span id="txtLon">0.000000</span></div>
                 </div>
             </div>
         </div>
@@ -198,27 +180,6 @@
             }
         }
 
-        // --- INISIALISASI ENGINE PETA DIGITAL LEAFLET ---
-        const map = L.map('map').setView([-7.0522, 110.4377], 17);
-        
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
-
-        // Mengubah marker kapal menjadi bentuk point murni (CircleMarker)
-        let markerKapal = L.circleMarker([-7.0522, 110.4377], {
-            radius: 8,
-            fillColor: "#4791ff",
-            color: "#ffffff",
-            weight: 2,
-            opacity: 1,
-            fillOpacity: 0.9
-        }).addTo(map);
-
-        let koordinatJejak = [];
-        let garisLintasan = L.polyline(koordinatJejak, {color: '#ff7b00', weight: 4, opacity: 0.8}).addTo(map);
-
         // --- DATA JARINGAN NETWORK MQTT ---
         const BROKER_URL = "wss://broker.emqx.io:8084/mqtt"; 
         const TOPIC_CONTROL = "usv/control/navigation";
@@ -262,26 +223,8 @@
                     let heading = parseFloat(parts[2]);
                     document.getElementById("txtCompass").innerText = heading.toFixed(1);
 
-                    // 3. Ekstraksi GPS
-                    const latKapal = parseFloat(parts[3]);
-                    const lonKapal = parseFloat(parts[4]);
-
-                    document.getElementById("txtLat").innerText = latKapal.toFixed(6);
-                    document.getElementById("txtLon").innerText = lonKapal.toFixed(6);
-
-                    // 4. Plotting rute riil
-                    if (latKapal !== 0.0 && lonKapal !== 0.0) {
-                        const posisiBaru = [latKapal, lonKapal];
-                        markerKapal.setLatLng(posisiBaru);
-                        
-                        if (markerKapal.setRotationAngle) {
-                            markerKapal.setRotationAngle(heading);
-                        }
-
-                        koordinatJejak.push(posisiBaru);
-                        garisLintasan.setLatLngs(koordinatJejak);
-                        map.panTo(posisiBaru);
-                    }
+                    // Catatan: data GPS (parts[3], parts[4]) tetap dikirim oleh Raspi/ESP32,
+                    // tapi tampilan peta & lat/lon di web ini sudah dihapus sesuai permintaan.
                 }
             } else if (topic === TOPIC_LATENCY) {
                 // Pi meng-echo balik timestamp yang sama persis (bukan nilai ms terhitung).
